@@ -74,73 +74,77 @@ struct MeetingAlertView: View {
             }
             .padding(.top, 40)
 
-            // Meeting title
-            Text(alertManager.meetingTitle)
-                .font(.system(size: 36, weight: .bold))
-                .padding(.top, 30)
+            Spacer()
+                .frame(height: 30)
 
-            // Time indicator
-            Text(alertManager.meetingTime)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(.red)
-                .padding(.top, 10)
+            // Main content container with solid background
+            VStack(spacing: 20) {
+                // Meeting title
+                Text(alertManager.meetingTitle)
+                    .font(.system(size: 36, weight: .bold))
 
-            // Location with platform icon
-            if !alertManager.meetingLocation.isEmpty {
-                HStack(spacing: 8) {
-                    if meetingURL != nil {
-                        Image(systemName: meetingIcon)
-                            .foregroundColor(.blue)
-                            .font(.title2)
-                        if !meetingPlatform.isEmpty {
-                            Text(meetingPlatform)
-                                .font(.system(size: 18, weight: .medium))
+                // Time indicator
+                Text(alertManager.meetingTime)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.red)
+
+                // Location with platform icon
+                if !alertManager.meetingLocation.isEmpty {
+                    HStack(spacing: 8) {
+                        if meetingURL != nil {
+                            Image(systemName: meetingIcon)
                                 .foregroundColor(.blue)
+                                .font(.title2)
+                            if !meetingPlatform.isEmpty {
+                                Text(meetingPlatform)
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.blue)
+                            }
+                        } else {
+                            Image(systemName: "location.fill")
+                                .foregroundColor(Color(NSColor.secondaryLabelColor))
+                            Text(alertManager.meetingLocation)
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(NSColor.secondaryLabelColor))
                         }
-                    } else {
-                        Image(systemName: "location.fill")
-                            .foregroundColor(.secondary)
-                        Text(alertManager.meetingLocation)
-                            .font(.system(size: 18))
-                            .foregroundColor(.secondary)
                     }
                 }
-                .padding(.top, 15)
-            }
 
-            Spacer()
-
-            // Action buttons
-            HStack(spacing: 20) {
-                Button(action: {
-                    // Open Calendar app
-                    NSWorkspace.shared.open(URL(string: "ical://")!)
-                    alertManager.dismissAlert()
-                }) {
-                    Text("Open Calendar")
-                        .font(.headline)
-                        .frame(width: 150)
-                }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
-
-                if let url = meetingURL {
+                // Action buttons
+                HStack(spacing: 20) {
                     Button(action: {
-                        NSWorkspace.shared.open(url)
+                        // Open Calendar app
+                        NSWorkspace.shared.open(URL(string: "ical://")!)
                         alertManager.dismissAlert()
                     }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: meetingIcon)
-                            Text("Join Meeting")
-                        }
-                        .font(.headline)
-                        .frame(width: 150)
+                        Text("Open Calendar")
+                            .font(.headline)
+                            .frame(width: 150)
                     }
                     .controlSize(.large)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
+
+                    if let url = meetingURL {
+                        Button(action: {
+                            NSWorkspace.shared.open(url)
+                            alertManager.dismissAlert()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: meetingIcon)
+                                Text("Join Meeting")
+                            }
+                            .font(.headline)
+                            .frame(width: 150)
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
-            .padding(.bottom, 30)
+            .padding(30)
+            .background(Color(NSColor.windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+
+            Spacer()
 
             // Dismiss button
             Button(action: {
@@ -148,17 +152,21 @@ struct MeetingAlertView: View {
             }) {
                 Text("Dismiss")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(NSColor.secondaryLabelColor))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
             .padding(.bottom, 20)
         }
-        .frame(width: 500, height: 400)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color(NSColor.windowBackgroundColor))
-                .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .frame(width: 500)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.quaternary, lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.3), radius: 25, x: 0, y: 12)
         .onAppear {
             isAnimating = true
             // Play alert sound

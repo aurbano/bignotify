@@ -11,6 +11,9 @@ class CalendarManager: ObservableObject {
 
     private let eventStore = EKEventStore()
     private var timer: Timer?
+    private weak var alertManager: AlertManager?
+    private weak var settingsManager: SettingsManager?
+    private var alertedEvents = Set<String>()
 
     init() {
         requestAccess()
@@ -59,8 +62,24 @@ class CalendarManager: ObservableObject {
         let now = Date()
         let endDate = Calendar.current.date(byAdding: .day, value: 1, to: now)!
 
-        // Get settings
-        let settingsManager = SettingsManager()
+        // Use shared settings manager
+        guard let settingsManager = self.settingsManager else {
+            // Fallback: load all calendars if no settings manager is set
+            let predicate = eventStore.predicateForEvents(
+                withStart: now,
+                end: endDate,
+                calendars: calendars.isEmpty ? nil : calendars
+            )
+            let events = eventStore.events(matching: predicate)
+                .filter { !$0.isAllDay }
+                .sorted { $0.startDate < $1.startDate }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.upcomingEvents = events
+                self?.nextEvent = events.first
+            }
+            return
+        }
 
         // Filter calendars based on settings
         var calendarsToSearch: [EKCalendar]?
@@ -128,33 +147,51 @@ class CalendarManager: ObservableObject {
     private func startMonitoring() {
         // Refresh events every minute
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            self?.loadCalendars()  // This will also call loadUpcomingEvents
+            self?.loadUpcomingEvents()  // Only reload events, not all calendars
             self?.checkForUpcomingMeetings()
         }
     }
 
+    func setAlertManager(_ manager: AlertManager) {
+        self.alertManager = manager
+    }
+
+    func setSettingsManager(_ manager: SettingsManager) {
+        self.settingsManager = manager
+    }
+
     private func checkForUpcomingMeetings() {
-        guard let nextEvent = nextEvent else { return }
+        let now = Date()
+        for event in upcomingEvents {
+            let timeUntil = event.startDate.timeIntervalSince(now)
 
-        let settingsManager = SettingsManager()
+            // Check if event is starting in the next minute and we haven't alerted for it
+            if timeUntil > 0 && timeUntil <= 60 {
+                let eventID = event.calendarItemIdentifier
+                if !alertedEvents.contains(eventID) {
+                    alertedEvents.insert(eventID)
 
-        // Skip if meeting has no location and setting is enabled
-        if settingsManager.skipMeetingsWithoutLocation {
-            if nextEvent.location == nil || nextEvent.location?.isEmpty == true {
-                return
+                    // Skip if meeting has no location and setting is enabled
+                    if let settingsManager = self.settingsManager,
+                       settingsManager.skipMeetingsWithoutLocation {
+                        if event.location == nil || event.location?.isEmpty == true {
+                            continue
+                        }
+                    }
+
+                    // Show alert using the shared alert manager
+                    alertManager?.showAlert(
+                        title: event.title,
+                        time: "Starting now",
+                        location: event.location ?? ""
+                    )
+
+                    // Remove from alerted list after 5 minutes to allow re-alerting if needed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
+                        self?.alertedEvents.remove(eventID)
+                    }
+                }
             }
-        }
-
-        let timeUntil = nextEvent.startDate.timeIntervalSince(Date())
-
-        // Alert when meeting is starting (within 30 seconds)
-        if timeUntil > -30 && timeUntil < 30 {
-            let alertManager = AlertManager()
-            alertManager.showAlert(
-                title: nextEvent.title,
-                time: "Starting Now!",
-                location: nextEvent.location ?? ""
-            )
         }
     }
 

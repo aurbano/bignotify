@@ -164,73 +164,26 @@ else
     echo "  2. Run: xattr -cr /Applications/BigNotify.app"
 fi
 
-# Create a DMG for distribution
-echo "Creating DMG..."
-DMG_NAME="$APP_NAME-$VERSION.dmg"
-DMG_PATH="$BUILD_DIR/$DMG_NAME"
-
-# Remove any existing DMG first
-rm -f "$DMG_PATH"
-
-# Try create-dmg first
-if npx create-dmg "$APP_DIR" "$BUILD_DIR" --overwrite --dmg-title="$APP_NAME" 2>/dev/null; then
-    # Rename the created DMG to our desired name if needed
-    CREATED_DMG=$(find "$BUILD_DIR" -name "*.dmg" -maxdepth 1 | head -1)
-    if [ -n "$CREATED_DMG" ] && [ "$CREATED_DMG" != "$DMG_PATH" ]; then
-        mv "$CREATED_DMG" "$DMG_PATH"
-    fi
-    echo "DMG created successfully with create-dmg"
-else
-    echo "create-dmg failed, using hdiutil directly..."
-
-    # Fallback: Create DMG using native hdiutil
-    TEMP_DMG="$BUILD_DIR/temp.dmg"
-    VOL_NAME="$APP_NAME"
-
-    # Create a temporary directory for the DMG contents
-    DMG_TEMP_DIR="$BUILD_DIR/dmg_temp"
-    rm -rf "$DMG_TEMP_DIR"
-    mkdir -p "$DMG_TEMP_DIR"
-
-    # Copy the app to the temporary directory
-    cp -R "$APP_DIR" "$DMG_TEMP_DIR/"
-
-    # Create a symbolic link to Applications
-    ln -s /Applications "$DMG_TEMP_DIR/Applications"
-
-    # Create the DMG
-    hdiutil create -volname "$VOL_NAME" \
-                   -srcfolder "$DMG_TEMP_DIR" \
-                   -ov \
-                   -format UDZO \
-                   "$DMG_PATH"
-
-    # Clean up
-    rm -rf "$DMG_TEMP_DIR"
-
-    if [ -f "$DMG_PATH" ]; then
-        echo "DMG created successfully with hdiutil"
-    else
-        echo "Failed to create DMG"
-    fi
-fi
-
-# Also create a zip for simpler distribution
 echo "Creating ZIP..."
 cd "$BUILD_DIR"
 zip -r "$APP_NAME-$VERSION.zip" "$APP_NAME.app"
 cd ..
 
 echo ""
+echo "Installing to Applications directory..."
+# Kill any running instances first
+killall BigNotify 2>/dev/null || true
+
+# Remove existing app if it exists and copy new one
+rm -rf "/Applications/BigNotify.app"
+cp -r "$APP_DIR" "/Applications/"
+
+echo ""
 echo "Build complete!"
 echo "  App bundle: $APP_DIR"
-if [ -f "$DMG_PATH" ]; then
-    echo "  DMG: $DMG_PATH"
-fi
-echo "  ZIP: $BUILD_DIR/$APP_NAME-$VERSION.zip"
+echo "  Installed to: /Applications/BigNotify.app"
 echo ""
-echo "To install locally:"
-echo "  cp -r $APP_DIR /Applications/"
+echo "  ZIP: $BUILD_DIR/$APP_NAME-$VERSION.zip"
 echo ""
 echo "To distribute:"
 echo "  Upload $BUILD_DIR/$APP_NAME-$VERSION.zip to GitHub Releases"

@@ -27,6 +27,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alertManager = AlertManager()
         calendarManager = CalendarManager()
 
+        // Connect the managers
+        calendarManager?.setAlertManager(alertManager!)
+
         // Hide from dock
         NSApp.setActivationPolicy(.accessory)
 
@@ -109,20 +112,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .environmentObject(alertManager)
                 .environmentObject(calendarManager)
 
-            // Create NSPanel with SwiftUI content
+            // Create the hosting controller and get its size
+            let hostingView = NSHostingView(rootView: contentView)
+            let fittingSize = hostingView.fittingSize
+            let windowWidth: CGFloat = 400
+            let windowHeight = max(fittingSize.height, 200) // Minimum height of 200
+
+            // Create NSPanel with dynamic size and native macOS styling
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 580),
+                contentRect: NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
             )
 
             panel.level = .floating
-            panel.backgroundColor = NSColor.windowBackgroundColor
+            panel.backgroundColor = NSColor.clear
+            panel.isOpaque = false
             panel.hasShadow = true
-
-            // Create the hosting controller and retain it
-            let hostingView = NSHostingView(rootView: contentView)
             panel.contentView = hostingView
 
             panel.isReleasedWhenClosed = false
@@ -142,7 +149,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let screenFrame = button.window?.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
 
             let windowWidth: CGFloat = 400
-            let windowHeight: CGFloat = 580
+            let windowHeight = mainWindow?.frame.height ?? 200
             let padding: CGFloat = 5
             let menuBarHeight: CGFloat = 22
 
