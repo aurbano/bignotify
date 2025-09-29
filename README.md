@@ -8,7 +8,7 @@ Automatically monitors selected macOS calendars and displays big alert windows w
 
 
 ## When a meeting starts:
-<img width="500" height="467" alt="Screenshot 2025-09-29 at 14 04 55" src="https://github.com/user-attachments/assets/b00ed8ef-7087-4b68-af26-aa2636d3cc42" />
+<img width="1542" height="895" alt="image" src="https://github.com/user-attachments/assets/3a66d22c-eafd-4ab2-91f8-a2172bb7fcb5" />
 
 
 ## App window and settings:
