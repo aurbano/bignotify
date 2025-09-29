@@ -12,7 +12,7 @@ Automatically monitors selected macOS calendars and displays big alert windows w
 
 
 ## App window and settings:
-<img width="400" height="688" alt="Screenshot 2025-09-29 at 14 04 38" src="https://github.com/user-attachments/assets/e242fa47-46ee-4e47-b85f-bcabf3a6b586" />
+<img width="400" height="604" alt="Screenshot 2025-09-29 at 14 06 40" src="https://github.com/user-attachments/assets/31bb8c41-cdd8-4a2e-931d-f8bc7949d85a" />
 
 
 ## Installation
