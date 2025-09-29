@@ -7,6 +7,13 @@ Automatically monitors selected macOS calendars and displays big alert windows w
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 
 
+## When a meeting starts:
+<img width="500" height="467" alt="Screenshot 2025-09-29 at 14 04 55" src="https://github.com/user-attachments/assets/b00ed8ef-7087-4b68-af26-aa2636d3cc42" />
+
+
+## App window and settings:
+<img width="400" height="688" alt="Screenshot 2025-09-29 at 14 04 38" src="https://github.com/user-attachments/assets/e242fa47-46ee-4e47-b85f-bcabf3a6b586" />
+
 
 ## Installation
 
