@@ -22,7 +22,51 @@ mkdir -p "$RESOURCES_DIR"
 
 # Build the binary
 echo "Compiling Swift code..."
-swift build -c release --arch arm64 --arch x86_64
+
+# Check if we're on Apple Silicon or Intel
+ARCH=$(uname -m)
+
+if [[ "$ARCH" == "arm64" ]]; then
+    echo "Building for Apple Silicon..."
+    swift build -c release --arch arm64
+
+    # Create output directory
+    mkdir -p ".build/apple/Products/Release"
+
+    # Also try to build for Intel if possible (for universal binary)
+    if swift build -c release --arch x86_64 2>/dev/null; then
+        echo "Creating universal binary..."
+        lipo -create \
+            ".build/arm64-apple-macosx/release/BigNotify" \
+            ".build/x86_64-apple-macosx/release/BigNotify" \
+            -output ".build/apple/Products/Release/BigNotify"
+    else
+        echo "Could not build for x86_64, creating Apple Silicon only build"
+        cp ".build/arm64-apple-macosx/release/BigNotify" ".build/apple/Products/Release/BigNotify"
+    fi
+elif [[ "$ARCH" == "x86_64" ]]; then
+    echo "Building for Intel..."
+    swift build -c release --arch x86_64
+    mkdir -p ".build/apple/Products/Release"
+    cp ".build/x86_64-apple-macosx/release/BigNotify" ".build/apple/Products/Release/BigNotify"
+else
+    echo "Building for current architecture..."
+    swift build -c release
+fi
+
+# Ensure the binary exists
+if [[ ! -f ".build/apple/Products/Release/BigNotify" ]]; then
+    # Fallback: find the binary wherever it was built
+    BINARY_PATH=$(find .build -name "BigNotify" -type f -path "*/release/*" | head -1)
+    if [[ -n "$BINARY_PATH" ]]; then
+        echo "Found binary at: $BINARY_PATH"
+        mkdir -p ".build/apple/Products/Release"
+        cp "$BINARY_PATH" ".build/apple/Products/Release/BigNotify"
+    else
+        echo "Error: Could not find compiled binary"
+        exit 1
+    fi
+fi
 
 # Copy binary
 cp ".build/apple/Products/Release/BigNotify" "$MACOS_DIR/$APP_NAME"
@@ -70,49 +114,106 @@ cat > "$CONTENTS_DIR/Info.plist" << EOF
 EOF
 
 # Create AppIcon.icns from icon.png if it exists
-if [ -f "icon.png" ]; then
-    echo "Creating app icon..."
-    mkdir -p "$RESOURCES_DIR/AppIcon.iconset"
+# if [ -f "icon.png" ]; then
+#     echo "Creating app icon..."
+#     mkdir -p "$RESOURCES_DIR/AppIcon.iconset"
 
-    # Generate different icon sizes
-    sips -z 16 16     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_16x16.png"
-    sips -z 32 32     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_16x16@2x.png"
-    sips -z 32 32     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_32x32.png"
-    sips -z 64 64     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_32x32@2x.png"
-    sips -z 128 128   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_128x128.png"
-    sips -z 256 256   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_128x128@2x.png"
-    sips -z 256 256   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_256x256.png"
-    sips -z 512 512   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_256x256@2x.png"
-    sips -z 512 512   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_512x512.png"
-    sips -z 1024 1024 icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_512x512@2x.png"
+#     # Generate different icon sizes
+#     sips -z 16 16     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_16x16.png"
+#     sips -z 32 32     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_16x16@2x.png"
+#     sips -z 32 32     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_32x32.png"
+#     sips -z 64 64     icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_32x32@2x.png"
+#     sips -z 128 128   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_128x128.png"
+#     sips -z 256 256   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_128x128@2x.png"
+#     sips -z 256 256   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_256x256.png"
+#     sips -z 512 512   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_256x256@2x.png"
+#     sips -z 512 512   icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_512x512.png"
+#     sips -z 1024 1024 icon.png --out "$RESOURCES_DIR/AppIcon.iconset/icon_512x512@2x.png"
 
-    # Create icns file
-    iconutil -c icns "$RESOURCES_DIR/AppIcon.iconset" -o "$RESOURCES_DIR/AppIcon.icns"
+#     # Create icns file
+#     iconutil -c icns "$RESOURCES_DIR/AppIcon.iconset" -o "$RESOURCES_DIR/AppIcon.icns"
 
-    # Clean up iconset
-    rm -rf "$RESOURCES_DIR/AppIcon.iconset"
-fi
+#     # Clean up iconset
+#     rm -rf "$RESOURCES_DIR/AppIcon.iconset"
+# fi
 
 # Sign the app if certificate is available
+ENTITLEMENTS_FILE="BigNotify.entitlements"
 if [[ -n "${APPLE_DEVELOPER_ID}" ]]; then
     echo "Signing app with certificate: ${APPLE_DEVELOPER_ID}"
-    codesign --force --deep --sign "${APPLE_DEVELOPER_ID}" "$APP_DIR"
+    if [[ -f "$ENTITLEMENTS_FILE" ]]; then
+        codesign --force --deep --entitlements "$ENTITLEMENTS_FILE" --sign "${APPLE_DEVELOPER_ID}" "$APP_DIR"
+    else
+        codesign --force --deep --sign "${APPLE_DEVELOPER_ID}" "$APP_DIR"
+    fi
 
     # Verify the signature
     codesign --verify --deep --strict "$APP_DIR"
     spctl --assess --type exec "$APP_DIR" || echo "Note: Gatekeeper verification may fail for ad-hoc signed apps"
 else
     echo "No Developer ID certificate provided. Using ad-hoc signing..."
-    # Ad-hoc sign (makes the app run more smoothly on the build machine at least)
-    codesign --force --deep --sign - "$APP_DIR"
+    # Ad-hoc sign with entitlements (makes the app run more smoothly on the build machine at least)
+    if [[ -f "$ENTITLEMENTS_FILE" ]]; then
+        echo "Using entitlements file: $ENTITLEMENTS_FILE"
+        codesign --force --deep --entitlements "$ENTITLEMENTS_FILE" --sign - "$APP_DIR"
+    else
+        codesign --force --deep --sign - "$APP_DIR"
+    fi
     echo "App is ad-hoc signed. Users will need to:"
     echo "  1. Right-click and select 'Open' on first launch, OR"
     echo "  2. Run: xattr -cr /Applications/BigNotify.app"
 fi
 
-# Create a DMG for distribution using create-dmg npm package
+# Create a DMG for distribution
 echo "Creating DMG..."
-npx create-dmg "$APP_DIR" "$BUILD_DIR" --overwrite --dmg-title="$APP_NAME" || echo "Note: DMG creation may require code signing"
+DMG_NAME="$APP_NAME-$VERSION.dmg"
+DMG_PATH="$BUILD_DIR/$DMG_NAME"
+
+# Remove any existing DMG first
+rm -f "$DMG_PATH"
+
+# Try create-dmg first
+if npx create-dmg "$APP_DIR" "$BUILD_DIR" --overwrite --dmg-title="$APP_NAME" 2>/dev/null; then
+    # Rename the created DMG to our desired name if needed
+    CREATED_DMG=$(find "$BUILD_DIR" -name "*.dmg" -maxdepth 1 | head -1)
+    if [ -n "$CREATED_DMG" ] && [ "$CREATED_DMG" != "$DMG_PATH" ]; then
+        mv "$CREATED_DMG" "$DMG_PATH"
+    fi
+    echo "DMG created successfully with create-dmg"
+else
+    echo "create-dmg failed, using hdiutil directly..."
+
+    # Fallback: Create DMG using native hdiutil
+    TEMP_DMG="$BUILD_DIR/temp.dmg"
+    VOL_NAME="$APP_NAME"
+
+    # Create a temporary directory for the DMG contents
+    DMG_TEMP_DIR="$BUILD_DIR/dmg_temp"
+    rm -rf "$DMG_TEMP_DIR"
+    mkdir -p "$DMG_TEMP_DIR"
+
+    # Copy the app to the temporary directory
+    cp -R "$APP_DIR" "$DMG_TEMP_DIR/"
+
+    # Create a symbolic link to Applications
+    ln -s /Applications "$DMG_TEMP_DIR/Applications"
+
+    # Create the DMG
+    hdiutil create -volname "$VOL_NAME" \
+                   -srcfolder "$DMG_TEMP_DIR" \
+                   -ov \
+                   -format UDZO \
+                   "$DMG_PATH"
+
+    # Clean up
+    rm -rf "$DMG_TEMP_DIR"
+
+    if [ -f "$DMG_PATH" ]; then
+        echo "DMG created successfully with hdiutil"
+    else
+        echo "Failed to create DMG"
+    fi
+fi
 
 # Also create a zip for simpler distribution
 echo "Creating ZIP..."
@@ -123,7 +224,9 @@ cd ..
 echo ""
 echo "Build complete!"
 echo "  App bundle: $APP_DIR"
-echo "  DMG: $DMG_NAME"
+if [ -f "$DMG_PATH" ]; then
+    echo "  DMG: $DMG_PATH"
+fi
 echo "  ZIP: $BUILD_DIR/$APP_NAME-$VERSION.zip"
 echo ""
 echo "To install locally:"

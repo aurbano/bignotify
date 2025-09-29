@@ -9,14 +9,8 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 15) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("BigNotify")
-                    .font(.system(size: 24, weight: .semibold))
-
-                Text("Calendar Alert Manager")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
+            Text("BigNotify")
+                .font(.system(size: 24, weight: .semibold))
 
             Divider()
                 .padding(.vertical, 5)
