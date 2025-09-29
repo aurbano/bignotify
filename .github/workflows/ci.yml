@@ -16,22 +16,21 @@ jobs:
   build-and-test:
     runs-on: macos-latest
 
-    strategy:
-      matrix:
-        swift: ["5.9"]
-        xcode: ["15.0"]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+      - name: Select Latest Xcode
+        run: |
+          # List available Xcode versions
+          ls /Applications | grep Xcode
+          # Select the latest available Xcode
+          sudo xcode-select -s /Applications/Xcode.app
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@v1
         with:
-          swift-version: ${{ matrix.swift }}
+          swift-version: "5.9"
 
       - name: Swift version
         run: swift --version
