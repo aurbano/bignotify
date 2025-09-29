@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>BigNotify</string>
+    <key>CFBundleExecutable</key>
+    <string>BigNotify</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.yourcompany.bignotify</string>
+    <key>CFBundleName</key>
+    <string>BigNotify</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>BigNotify needs access to your calendar to show meeting alerts.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

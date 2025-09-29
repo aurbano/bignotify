@@ -1,0 +1,223 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v1
+      with:
+        swift-version: "5.9"
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install create-dmg
+      run: npm install -g create-dmg
+
+    - name: Import Code Signing Certificate
+      if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+      env:
+        APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # Create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        # Import certificate from secrets
+        echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+        # Create temporary keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+        # Import certificate to keychain
+        security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+
+        # Allow codesign to access the certificate without password prompts
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+    - name: Get version
+      id: get_version
+      run: |
+        if [[ "${{ github.event_name }}" == "push" ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        else
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version $VERSION"
+
+    - name: Update version in build script
+      run: |
+        sed -i '' "s/VERSION=\".*\"/VERSION=\"${{ steps.get_version.outputs.VERSION }}\"/" build_app.sh
+
+    - name: Build application
+      env:
+        APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+      run: |
+        chmod +x build_app.sh
+        ./build_app.sh
+
+    - name: Notarize app
+      if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_DEVELOPER_ID != '' }}
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        echo "Notarizing app..."
+
+        # Create a ZIP for notarization
+        ditto -c -k --keepParent "build/BigNotify.app" "build/BigNotify-notarize.zip"
+
+        # Submit for notarization
+        xcrun notarytool submit "build/BigNotify-notarize.zip" \
+          --apple-id "$APPLE_ID" \
+          --password "$APPLE_ID_PASSWORD" \
+          --team-id "$APPLE_TEAM_ID" \
+          --wait
+
+        # Staple the notarization ticket
+        xcrun stapler staple "build/BigNotify.app"
+
+        # Re-create the distribution ZIP with notarized app
+        cd build
+        rm -f "BigNotify-${{ steps.get_version.outputs.VERSION }}.zip"
+        zip -r "BigNotify-${{ steps.get_version.outputs.VERSION }}.zip" "BigNotify.app"
+        cd ..
+      continue-on-error: true
+
+    - name: Generate SHA256
+      id: sha256
+      run: |
+        SHA256=$(shasum -a 256 build/BigNotify-${{ steps.get_version.outputs.VERSION }}.zip | awk '{print $1}')
+        echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+        echo "SHA256: $SHA256"
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
+        release_name: BigNotify v${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## BigNotify v${{ steps.get_version.outputs.VERSION }}
+
+          Calendar alert manager for macOS that shows prominent meeting notifications.
+
+          ### Installation
+
+          #### Option 1: Direct Download
+          Download `BigNotify-${{ steps.get_version.outputs.VERSION }}.zip` below and extract to your Applications folder.
+
+          #### Option 2: Homebrew Cask
+          ```bash
+          brew tap yourusername/bignotify
+          brew install --cask bignotify
+          ```
+
+          ### Changes
+          - See [commits](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.VERSION }}) for details
+
+          ### SHA256
+          `${{ steps.sha256.outputs.SHA256 }}`
+        draft: false
+        prerelease: false
+
+    - name: Upload ZIP Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./build/BigNotify-${{ steps.get_version.outputs.VERSION }}.zip
+        asset_name: BigNotify-${{ steps.get_version.outputs.VERSION }}.zip
+        asset_content_type: application/zip
+
+    - name: Upload DMG Release Asset (if created)
+      uses: actions/upload-release-asset@v1
+      if: hashFiles('build/*.dmg') != ''
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./build/BigNotify-${{ steps.get_version.outputs.VERSION }}.dmg
+        asset_name: BigNotify-${{ steps.get_version.outputs.VERSION }}.dmg
+        asset_content_type: application/x-apple-diskimage
+      continue-on-error: true
+
+    - name: Update Homebrew Formula
+      run: |
+        # Update the formula with correct version and SHA256
+        cat > homebrew/bignotify.rb << EOF
+        cask "bignotify" do
+          version "${{ steps.get_version.outputs.VERSION }}"
+          sha256 "${{ steps.sha256.outputs.SHA256 }}"
+
+          url "https://github.com/${{ github.repository }}/releases/download/v#{version}/BigNotify-#{version}.zip"
+
+          name "BigNotify"
+          desc "Calendar alert manager that shows prominent meeting notifications"
+          homepage "https://github.com/${{ github.repository }}"
+
+          depends_on macos: ">= :ventura"
+
+          app "BigNotify.app"
+
+          uninstall quit: "com.bignotify.app"
+
+          zap trash: [
+            "~/Library/Preferences/com.bignotify.app.plist",
+            "~/Library/Application Support/BigNotify",
+          ]
+        end
+        EOF
+
+    - name: Commit updated formula
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add homebrew/bignotify.rb
+        git diff --staged --quiet || git commit -m "Update Homebrew formula for v${{ steps.get_version.outputs.VERSION }}"
+        git push origin HEAD:main || echo "No changes to push"
+      continue-on-error: true
+
+    - name: Output summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **SHA256**: \`${{ steps.sha256.outputs.SHA256 }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release URL**: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Create a homebrew tap repository: \`homebrew-bignotify\`" >> $GITHUB_STEP_SUMMARY
+        echo "2. Add the formula from \`homebrew/bignotify.rb\` to the tap" >> $GITHUB_STEP_SUMMARY
+        echo "3. Users can install with:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "brew tap ${{ github.repository_owner }}/bignotify" >> $GITHUB_STEP_SUMMARY
+        echo "brew install --cask bignotify" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
