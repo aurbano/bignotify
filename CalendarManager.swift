@@ -100,13 +100,10 @@ class CalendarManager: ObservableObject {
         var events = eventStore.events(matching: predicate)
             .filter { !$0.isAllDay }
 
-        // Filter out events without location if setting is enabled
+        // Filter out events without location or meeting link if setting is enabled
         if settingsManager.skipMeetingsWithoutLocation {
             events = events.filter { event in
-                if let location = event.location, !location.isEmpty {
-                    return true
-                }
-                return false
+                hasLocationOrMeetingLink(event)
             }
         }
 
@@ -144,6 +141,76 @@ class CalendarManager: ObservableObject {
         }
     }
 
+    func extractMeetingLink(_ event: EKEvent) -> String? {
+        // Check location first
+        if let location = event.location, !location.isEmpty {
+            if containsMeetingLink(location) {
+                if let url = extractURL(from: location) {
+                    return url
+                }
+            }
+        }
+
+        // Check notes for meeting links
+        if let notes = event.notes, !notes.isEmpty {
+            if containsMeetingLink(notes) {
+                return extractURL(from: notes)
+            }
+        }
+
+        return nil
+    }
+
+    private func containsMeetingLink(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return lowercased.contains("zoom.us") ||
+               lowercased.contains("meet.google.com") ||
+               lowercased.contains("teams.microsoft.com") ||
+               lowercased.contains("webex.com") ||
+               lowercased.contains("whereby.com")
+    }
+
+    private func extractURL(from text: String) -> String? {
+        let patterns = [
+            "https://[^\\s<>\"]+zoom\\.us/[^\\s<>\"]+",
+            "https://meet\\.google\\.com/[^\\s<>\"]+",
+            "https://[^\\s<>\"]+teams\\.microsoft\\.com/[^\\s<>\"]+",
+            "https://[^\\s<>\"]+webex\\.com/[^\\s<>\"]+",
+            "https://whereby\\.com/[^\\s<>\"]+"
+        ]
+
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               let match = regex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..., in: text)),
+               let range = Range(match.range, in: text) {
+                var url = String(text[range])
+                // Clean up URL parameters that might be escaped
+                if url.contains("%3D") {
+                    url = url.replacingOccurrences(of: "%3D", with: "=")
+                }
+                if url.contains("%26") {
+                    url = url.replacingOccurrences(of: "%26", with: "&")
+                }
+                if url.contains("&amp;") {
+                    url = url.replacingOccurrences(of: "&amp;", with: "&")
+                }
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    func hasLocationOrMeetingLink(_ event: EKEvent) -> Bool {
+        // Check if event has a physical location
+        if let location = event.location, !location.isEmpty, !containsMeetingLink(location) {
+            return true
+        }
+
+        // Check if event has a meeting link in location or notes
+        return extractMeetingLink(event) != nil
+    }
+
     private func startMonitoring() {
         // Refresh events every minute
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -171,19 +238,21 @@ class CalendarManager: ObservableObject {
                 if !alertedEvents.contains(eventID) {
                     alertedEvents.insert(eventID)
 
-                    // Skip if meeting has no location and setting is enabled
+                    // Skip if meeting has no location or meeting link and setting is enabled
                     if let settingsManager = self.settingsManager,
                        settingsManager.skipMeetingsWithoutLocation {
-                        if event.location == nil || event.location?.isEmpty == true {
+                        if !hasLocationOrMeetingLink(event) {
                             continue
                         }
                     }
 
                     // Show alert using the shared alert manager
+                    let meetingLink = extractMeetingLink(event)
                     alertManager?.showAlert(
                         title: event.title,
                         time: "Starting now",
-                        location: event.location ?? ""
+                        location: event.location ?? "",
+                        meetingLink: meetingLink
                     )
 
                     // Remove from alerted list after 5 minutes to allow re-alerting if needed

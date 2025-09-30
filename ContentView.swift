@@ -56,7 +56,24 @@ struct ContentView: View {
                                     .font(.caption)
                             }
 
-                            if let location = nextEvent.location, !location.isEmpty {
+                            // Display meeting link if available
+                            if let meetingLink = calendarManager.extractMeetingLink(nextEvent) {
+                                Button(action: {
+                                    if let url = URL(string: meetingLink) {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "video.fill")
+                                            .foregroundColor(.blue)
+                                        Text("Join Meeting")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .help(meetingLink)
+                            } else if let location = nextEvent.location, !location.isEmpty {
                                 HStack {
                                     Image(systemName: "location")
                                         .foregroundColor(.gray)
@@ -85,10 +102,12 @@ struct ContentView: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
+                            let meetingLink = calendarManager.extractMeetingLink(nextEvent)
                             alertManager.showAlert(
                                 title: nextEvent.title,
                                 time: "Starting at \(calendarManager.formatEventTime(nextEvent))",
-                                location: nextEvent.location ?? ""
+                                location: nextEvent.location ?? "",
+                                meetingLink: meetingLink
                             )
                         }
                         .onHover { hovering in
@@ -247,6 +266,9 @@ struct ContentView: View {
                                     }
                                 }
                                 .toggleStyle(.checkbox)
+                                .onChange(of: settingsManager.skipMeetingsWithoutLocation) { _ in
+                                    calendarManager.loadUpcomingEvents()
+                                }
                             }
                         }
                     }

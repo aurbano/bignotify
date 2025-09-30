@@ -6,14 +6,16 @@ class AlertManager: ObservableObject {
     @Published var meetingTitle = "Team Standup"
     @Published var meetingTime = "Starting Now"
     @Published var meetingLocation = "Zoom"
+    @Published var meetingLink: String?
 
     private var alertWindow: NSPanel?
     private var dismissTimer: DispatchWorkItem?
 
-    func showAlert(title: String = "Team Meeting", time: String = "Starting Now", location: String = "") {
+    func showAlert(title: String = "Team Meeting", time: String = "Starting Now", location: String = "", meetingLink: String? = nil) {
         meetingTitle = title
         meetingTime = time
         meetingLocation = location
+        self.meetingLink = meetingLink
         isShowingAlert = true
 
         if NSScreen.main != nil {

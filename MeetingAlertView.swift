@@ -5,6 +5,12 @@ struct MeetingAlertView: View {
     @State private var isAnimating = false
 
     var meetingURL: URL? {
+        // Check if we have a direct meeting link
+        if let meetingLink = alertManager.meetingLink {
+            return URL(string: meetingLink)
+        }
+
+        // Fallback to checking location
         let location = alertManager.meetingLocation
         if location.isEmpty { return nil }
 
@@ -19,30 +25,30 @@ struct MeetingAlertView: View {
     }
 
     var meetingIcon: String {
-        let location = alertManager.meetingLocation.lowercased()
+        let link = alertManager.meetingLink?.lowercased() ?? alertManager.meetingLocation.lowercased()
 
-        if location.contains("zoom.us") || location.contains("zoom://") {
+        if link.contains("zoom.us") || link.contains("zoom://") {
             return "video.circle.fill"
-        } else if location.contains("meet.google.com") {
+        } else if link.contains("meet.google.com") {
             return "video.square.fill"
-        } else if location.contains("teams.microsoft.com") {
+        } else if link.contains("teams.microsoft.com") {
             return "person.3.fill"
-        } else if location.contains("webex.com") {
+        } else if link.contains("webex.com") {
             return "video.badge.checkmark"
         }
         return "video"
     }
 
     var meetingPlatform: String {
-        let location = alertManager.meetingLocation.lowercased()
+        let link = alertManager.meetingLink?.lowercased() ?? alertManager.meetingLocation.lowercased()
 
-        if location.contains("zoom.us") || location.contains("zoom://") {
+        if link.contains("zoom.us") || link.contains("zoom://") {
             return "Zoom"
-        } else if location.contains("meet.google.com") {
+        } else if link.contains("meet.google.com") {
             return "Google Meet"
-        } else if location.contains("teams.microsoft.com") {
+        } else if link.contains("teams.microsoft.com") {
             return "Teams"
-        } else if location.contains("webex.com") {
+        } else if link.contains("webex.com") {
             return "Webex"
         }
         return ""
